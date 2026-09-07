@@ -226,6 +226,17 @@ def cmd_matches(args) -> int:
     hits = find_matches(rows, watches)
     if args.weekend:
         hits = [(r, w) for r, w in hits if notify.is_weekend(r)]
+
+    if args.slack:
+        # 수집을 다시 돌리지 않고 지금 목록만 슬랙으로 보낸다.
+        # 알림 기록(notified)은 건드리지 않으므로 이후 sync 동작에 영향이 없다.
+        if not hits:
+            print("보낼 공연이 없습니다.")
+            return 0
+        notify.send(hits, bot_token=config.SLACK_BOT_TOKEN,
+                    channel=config.SLACK_CHANNEL, webhook=config.SLACK_WEBHOOK)
+        return 0
+
     notify.to_console(hits)
     return 0
 
@@ -435,6 +446,8 @@ def main(argv=None) -> int:
     m = sub.add_parser("matches", help="현재 매칭 보기")
     m.add_argument("--all", action="store_true", help="지난 공연도 포함")
     m.add_argument("--weekend", action="store_true", help="주말·공휴일 공연만")
+    m.add_argument("--slack", action="store_true",
+                   help="화면 대신 슬랙으로 보낸다 (알림 기록은 건드리지 않음)")
     m.set_defaults(func=cmd_matches)
 
     q = sub.add_parser("search", help="로컬 DB 자유 검색")

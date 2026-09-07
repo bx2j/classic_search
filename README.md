@@ -30,16 +30,27 @@ cp .env.example .env      # KOPIS_KEY 채우기
 
 ## 사용
 
+| 명령 | 슬랙 발송 | 하는 일 |
+|---|:--:|---|
+| `sync` | **감** | 수집 + 보강 + 매칭. **새로 매칭된 것만** 발송 |
+| `sync --resend` | **감** | 이미 보낸 것도 전부 다시 (표시 형식이 바뀐 경우) |
+| `sync --dry-run` | 안 감 | 화면에만. 알림 기록도 남기지 않음 |
+| `matches` | 안 감 | 현재 매칭 전체를 화면에 |
+| `matches --slack` | **감** | 수집 없이 지금 목록만 즉시 발송. 알림 기록 안 건드림 |
+| `matches --weekend` | 안 감 | 주말·공휴일만 |
+| `search <말>` | 안 감 | 로컬 DB 자유 검색 (관심목록 밖도) |
+| `doctor` | 안 감 | 설정·DB·네트워크·슬랙 점검 |
+| `slack-test` | **감** | 테스트 메시지 1건 |
+
 ```bash
-python -m concert_watch sync                # 수집 + 보강 + 매칭 + 알림
-python -m concert_watch sync --dry-run      # 알림 기록을 남기지 않고 확인만
-python -m concert_watch sync --resend       # 이미 보낸 것도 다시 발송
-python -m concert_watch matches             # 현재 매칭 전체 보기
-python -m concert_watch matches --weekend   # 주말(토·일) 공연만
-python -m concert_watch search 브람스        # 로컬 DB 자유 검색
+python -m concert_watch sync
+python -m concert_watch matches --weekend
+python -m concert_watch matches --weekend --slack    # 주말 공연만 슬랙으로
 python -m concert_watch search 브람스 --weekend
-python -m concert_watch slack-test          # 슬랙 연결 점검
+python -m concert_watch doctor
 ```
+
+`--weekend`와 `--slack`은 함께 쓸 수 있다.
 
 `search`는 수집된 모든 공연을 대상으로 한다. 관심목록에 없어도 검색된다.
 
