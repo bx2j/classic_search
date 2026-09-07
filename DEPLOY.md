@@ -1,91 +1,161 @@
-# 네이버 클라우드 마이크로 서버에 올리기
+# 배포 — 네이버 클라우드 마이크로 서버 (Rocky Linux 9.8)
 
-결론부터: **돕니다.** 윈도우 의존 코드가 없고, 자원도 거의 안 쓴다.
+레포: https://github.com/bx2j/classic_search
 
-## 자원 요구량
+## 0. 미리 확인
 
-| | 필요 | 마이크로 서버(1 vCPU / 1GB) |
-|---|---|---|
-| 메모리 | 100MB 안팎 | 여유 |
-| 디스크 | DB 17MB + 코드 → 100MB 미만 | 여유 |
-| CPU | 대부분 네트워크 대기 (호스트당 1초 간격) | 여유 |
-| 실행 시간 | 정상 운영 시 하루 1~2분 | — |
+**아웃바운드 인터넷.** NCP는 서버에 공인 IP가 없으면 밖으로 못 나간다
+(VPC면 NAT Gateway). KOPIS·예술의전당·롯데·GitHub·슬랙에 전부 나가야 하므로
+**공인 IP를 붙이거나 NAT를 둬야 한다.** 공인 IP 요금이 마이크로 서버값보다
+클 수도 있으니 콘솔에서 확인할 것.
+ACG는 아웃바운드 TCP 80/443만 열려 있으면 된다. 인바운드는 SSH(22)뿐.
 
-첫 실행만 오래 걸린다. 곡목·출연진 보강이 1,600건을 훑기 때문에 30분쯤 잡으면 된다.
-`--limit`으로 나눠서 며칠에 걸쳐 채워도 된다.
+**자원.** 메모리 100MB 안팎, 디스크 100MB 미만, 하루 1~2분 실행.
+마이크로(1 vCPU / 1GB)로 충분하다.
 
-## 미리 확인할 것 두 가지
+**파이썬.** Rocky 9의 기본 `python3`는 **3.9**다. 코드가 3.9에서 돌도록
+`from __future__ import annotations`를 넣어뒀으므로 **기본 파이썬 그대로 쓰면 된다.**
+(3.11/3.12를 쓰고 싶으면 `sudo dnf install -y python3.12` 후 아래 `python3`를 `python3.12`로 바꾼다.)
 
-**1. OS 이미지 — Python 3.10 이상.**
-코드가 `str | None`, `list[dict]` 같은 3.10 문법을 쓴다.
-- Ubuntu 22.04 이상 → 기본 3.10 ✅
-- Ubuntu 20.04(3.8), CentOS 7(3.6) → ❌. 이미지를 바꾸거나 pyenv로 따로 깔아야 한다.
+---
 
-**2. 아웃바운드 인터넷.**
-NCP는 서버에 공인 IP가 없으면 바깥으로 못 나간다(VPC면 NAT Gateway 필요).
-KOPIS·예당·롯데·슬랙에 전부 나가야 하므로 **공인 IP를 붙이거나 NAT를 둬야 한다.**
-비용이 서버값보다 클 수도 있으니 콘솔에서 현재 요금을 확인할 것.
-ACG(보안그룹)는 아웃바운드 TCP 80/443만 열려 있으면 된다. 인바운드는 SSH 외에 필요 없다.
-
-## 설치
+## 1. 서버 기본 세팅
 
 ```bash
-sudo apt update && sudo apt install -y python3-venv
-sudo timedatectl set-timezone Asia/Seoul     # 중요. 아래 설명 참고
-
-mkdir -p ~/concert-watch && cd ~/concert-watch
-# 코드 복사 (git 또는 scp). concerts.db 도 같이 옮기면 좋다 - 아래 참고
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-
-cp .env.example .env && vi .env       # KOPIS_KEY / SLACK_BOT_TOKEN / SLACK_CHANNEL
-chmod +x run_sync.sh
-./run_sync.sh && tail -20 sync.log    # 첫 실행 확인
+sudo dnf install -y git python3-pip cronie
+sudo systemctl enable --now crond          # 최소 이미지는 crond가 꺼져 있다
+sudo timedatectl set-timezone Asia/Seoul   # 중요 - 아래 6번 참고
+timedatectl | grep "Time zone"
 ```
 
-`truststore`는 설치되지 않는다(윈도우 전용 마커). 리눅스에는 필요 없고,
+## 2. 코드 내려받기
+
+```bash
+cd ~
+git clone https://github.com/bx2j/classic_search.git
+cd classic_search
+```
+
+공개 레포라 인증이 필요 없다.
+
+## 3. 가상환경과 의존성
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
+```
+
+`truststore`는 설치되지 않는다(윈도우 전용 마커). 리눅스엔 필요 없고,
 없으면 `net.py`가 알아서 건너뛴다.
 
-## cron 등록
+## 4. 비밀정보 넣기
+
+`.env`는 깃에 없다. 서버에서 직접 만든다.
+
+```bash
+cp .env.example .env
+chmod 600 .env
+vi .env
+```
+
+```ini
+KOPIS_KEY=<KOPIS 서비스키>
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL=#classic_search
+LOOKAHEAD_DAYS=180
+REGION_PRIORITY=서울특별시,경기도,인천광역시,대전광역시,세종특별자치시,충청남도,충청북도
+```
+
+`SLACK_APP_TOKEN`은 Socket Mode 전용이라 알림만 받을 거면 넣지 않아도 된다.
+
+## 5. 첫 실행
+
+```bash
+./run_sync.sh          # 백그라운드 아님. 30분쯤 걸린다
+tail -f sync.log
+```
+
+첫 실행만 오래 걸린다. 곡목·출연진·예매링크를 1,600여 건 채우기 때문이다.
+나눠서 채우고 싶으면:
+
+```bash
+.venv/bin/python -m concert_watch sync --limit 200
+```
+
+**주의:** DB를 새로 만들면 첫 실행에 현재 매칭 전부(13건)가 한꺼번에 알림으로 간다.
+한 번 시끄럽고 마는 거라 그냥 두면 되고, 원치 않으면 6-2를 참고한다.
+
+동작 확인:
+
+```bash
+.venv/bin/python -m concert_watch matches
+.venv/bin/python -m concert_watch search 브람스 --weekend
+```
+
+## 6. cron 등록
 
 ```bash
 crontab -e
 ```
+
 ```cron
-0 9 * * * /home/ubuntu/concert-watch/run_sync.sh
+0 9 * * * /home/rocky/classic_search/run_sync.sh
 ```
 
-`run_sync.sh`가 작업 디렉터리와 `TZ`를 직접 잡는다. cron은 PATH도 cwd도
-물려주지 않으므로 스크립트 안에서 처리해야 한다.
+경로는 `pwd`로 확인해서 절대경로로 넣는다. `run_sync.sh`가 작업 디렉터리와
+`TZ`를 직접 잡으므로 cron 쪽에 추가 설정은 필요 없다.
 
-## 시간대가 중요한 이유
+등록 확인:
 
-수집 구간을 `date.today()`로 잡고, 지난 공연 필터도 오늘 날짜를 쓴다.
-서버가 UTC로 놀면 한국 시간 오전 9시가 UTC 0시라 **하루 어긋난다.**
-`timedatectl set-timezone Asia/Seoul`을 하고, 그래도 `run_sync.sh`가
-`TZ=Asia/Seoul`을 한 번 더 못박는다.
+```bash
+crontab -l
+systemctl status crond
+```
 
-## DB를 옮길지 말지
+### 6-1. 시간대가 중요한 이유
 
-- **옮긴다**: `notified` 기록이 따라와서 이미 보낸 공연을 다시 안 보낸다. 권장.
-- **새로 만든다**: 첫 실행에 매칭 전부(현재 13건)가 한꺼번에 알림으로 간다.
-  한 번 시끄럽고 마는 거라 이것도 괜찮다.
+수집 구간과 지난 공연 필터가 `date.today()`를 쓴다. 서버가 UTC로 놀면
+한국 시간 오전 9시가 UTC 0시라 **하루 어긋난다.** 1번에서 KST를 잡고,
+그래도 `run_sync.sh`가 `TZ=Asia/Seoul`을 한 번 더 못박는다.
 
-`concerts.db` 하나만 복사하면 된다. `.env`는 **절대 git에 올리지 말 것**
-(`.gitignore`에 있다). scp로 따로 옮기거나 서버에서 직접 작성한다.
+### 6-2. 기존 DB를 가져오려면
 
-## 윈도우 PC와 병행하면
+`concerts.db`에 "이미 알린 공연" 기록(`notified`)이 들어 있다.
+윈도우 PC에서 옮기면 중복 알림이 없다.
 
-두 곳에서 같이 돌리면 **알림이 두 번 간다.** `notified`가 각자 따로 관리되기 때문.
-서버로 옮겼으면 PC 쪽 작업을 지운다:
+```bash
+# 로컬(윈도우)에서
+scp D:\workspace\my-project-2\concerts.db rocky@<서버IP>:~/classic_search/
+```
+
+## 7. 윈도우 PC 작업 끄기
+
+두 곳에서 같이 돌면 `notified`가 따로 관리돼 **알림이 두 번 간다.**
 
 ```powershell
 schtasks /delete /tn "concert-watch" /f
 ```
 
-## 잘 도는지 확인
+---
+
+## 갱신
 
 ```bash
-tail -f sync.log
-.venv/bin/python -m concert_watch matches
+cd ~/classic_search && git pull && .venv/bin/pip install -r requirements.txt
 ```
+
+`.env`와 `concerts.db`는 깃에 없으므로 `git pull`이 건드리지 않는다.
+
+## 문제가 생기면
+
+| 증상 | 원인 / 조치 |
+|---|---|
+| `/usr/bin/env: 'bash\r'` | 셸 스크립트가 CRLF. `.gitattributes`가 막지만, 깨졌다면 `sed -i 's/\r$//' run_sync.sh` |
+| `Permission denied` | `chmod +x run_sync.sh` |
+| cron이 안 돎 | `systemctl enable --now crond`, 경로가 절대경로인지 확인 |
+| 날짜가 하루 밀림 | 시간대. `timedatectl set-timezone Asia/Seoul` |
+| 슬랙 안 감 | `.venv/bin/python -m concert_watch slack-test` |
+| `TypeError: unsupported operand type(s) for \|` | 파이썬이 3.9 미만. `python3 --version` 확인 |
+| 네트워크 타임아웃 | 공인 IP / NAT 미설정. 0번 참고 |
+| SELinux 관련 거부 | `sudo ausearch -m avc -ts recent` 로 확인. 홈 디렉터리 실행은 보통 문제없다 |
