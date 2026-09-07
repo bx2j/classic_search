@@ -13,7 +13,7 @@ import re
 from difflib import SequenceMatcher
 import sys
 
-from . import config, notify, store
+from . import config, net, notify, store
 from .match import load_watches, find_matches, normalize, haystack
 from .sources import kopis, lotte, sac
 
@@ -283,6 +283,85 @@ def _force_utf8() -> None:
             pass
 
 
+def cmd_doctor(args) -> int:
+    """설정·DB·네트워크·슬랙을 한 번에 점검한다.
+
+    '로그가 비었다', '되는 것 같은데 알림이 안 온다' 같은 상황에서
+    어디가 끊겼는지 한 화면으로 보려고 만들었다.
+    """
+    import os
+    import sqlite3
+    from datetime import datetime
+
+    ok = True
+
+    def line(label, good, detail=""):
+        nonlocal ok
+        ok = ok and good
+        print(f"  [{'OK ' if good else 'FAIL'}] {label:<22} {detail}")
+
+    print("── 환경 ──")
+    print(f"  python      {sys.version.split()[0]}  ({sys.executable})")
+    print(f"  작업 디렉터리 {config.ROOT}")
+    print(f"  시간대       {datetime.now().astimezone().tzname()}  "
+          f"(현재 {datetime.now():%Y-%m-%d %H:%M})")
+    print(f"  TZ 환경변수  {os.environ.get('TZ', '(미설정)')}")
+
+    print("── 설정 ──")
+    line(".env 파일", (config.ROOT / ".env").exists(), str(config.ROOT / ".env"))
+    line("KOPIS_KEY", bool(config.KOPIS_KEY),
+         f"{config.KOPIS_KEY[:6]}…" if config.KOPIS_KEY else "비어 있음")
+    slack_ready = bool(config.SLACK_BOT_TOKEN and config.SLACK_CHANNEL) or bool(config.SLACK_WEBHOOK)
+    line("슬랙 설정", slack_ready,
+         f"채널={config.SLACK_CHANNEL or '(없음)'} "
+         f"토큰={'있음' if config.SLACK_BOT_TOKEN else '없음'} "
+         f"웹훅={'있음' if config.SLACK_WEBHOOK else '없음'}")
+    line("watchlist.yml", config.WATCHLIST_PATH.exists(),
+         f"{len(load_watches(config.WATCHLIST_PATH))}개 항목"
+         if config.WATCHLIST_PATH.exists() else "없음")
+
+    print("── 데이터베이스 ──")
+    exists = config.DB_PATH.exists()
+    size = config.DB_PATH.stat().st_size // 1024 if exists else 0
+    line("concerts.db", exists, f"{size:,}KB" if exists else "아직 없음(첫 실행 전이면 정상)")
+    if exists:
+        c = sqlite3.connect(config.DB_PATH)
+        q = lambda w: c.execute("select count(*) from performances where " + w).fetchone()[0]
+        try:
+            print(f"         공연 {q('1=1')}건 / 곡목 {q(chr(34) + 'program_core' + chr(34) + ' is not null and program_core != ' + chr(39) + chr(39))}건")
+        except sqlite3.Error as e:
+            print(f"         (조회 실패: {e})")
+        n = c.execute("select count(*) from notified").fetchone()[0]
+        print(f"         알림 기록 {n}건")
+
+    print("── 네트워크 ──")
+    for name, url in (("KOPIS", "http://www.kopis.or.kr/"),
+                      ("예술의전당", "https://www.sac.or.kr/"),
+                      ("롯데콘서트홀", "https://www.lotteconcerthall.com/"),
+                      ("슬랙", "https://slack.com/api/api.test")):
+        try:
+            r = net._session.get(url, timeout=15)
+            line(name, r.status_code < 500, f"HTTP {r.status_code}")
+        except Exception as e:  # noqa: BLE001
+            line(name, False, f"{type(e).__name__}: {str(e)[:60]}")
+
+    if config.SLACK_BOT_TOKEN:
+        print("── 슬랙 인증 ──")
+        try:
+            r = net._session.post("https://slack.com/api/auth.test",
+                                  headers={"Authorization": f"Bearer {config.SLACK_BOT_TOKEN}"},
+                                  timeout=15)
+            d = r.json()
+            line("auth.test", bool(d.get("ok")),
+                 f"team={d.get('team')} bot={d.get('user')}" if d.get("ok") else d.get("error"))
+        except Exception as e:  # noqa: BLE001
+            line("auth.test", False, str(e)[:60])
+
+    print()
+    print("결과:", "이상 없음" if ok else "위 FAIL 항목을 확인하세요")
+    return 0 if ok else 1
+
+
 def main(argv=None) -> int:
     _force_utf8()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -307,6 +386,9 @@ def main(argv=None) -> int:
     q.add_argument("--all", action="store_true", help="지난 공연도 포함")
     q.add_argument("--weekend", action="store_true", help="주말·공휴일 공연만")
     q.set_defaults(func=cmd_search)
+
+    d = sub.add_parser("doctor", help="설정·DB·네트워크·슬랙 한 번에 점검")
+    d.set_defaults(func=cmd_doctor)
 
     t = sub.add_parser("slack-test", help="슬랙 연결 점검")
     t.add_argument("--channel", default="", help="보낼 채널 (예: '#공연알림')")
