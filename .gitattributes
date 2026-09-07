@@ -1,0 +1,15 @@
+# 기본은 LF로 저장. 윈도우에서 만든 파일이 CRLF로 커밋되는 것을 막는다.
+* text=auto eol=lf
+
+# 셸 스크립트는 반드시 LF. CRLF면 리눅스에서
+#   /usr/bin/env: 'bash\r': No such file or directory
+# 로 죽는다.
+*.sh text eol=lf
+
+# 배치 파일은 윈도우용이므로 CRLF 유지
+*.bat text eol=crlf
+
+# 바이너리
+*.db binary
+*.png binary
+*.jpg binary

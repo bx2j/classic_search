@@ -1,0 +1,22 @@
+# 비밀정보 - 절대 커밋 금지
+.env
+
+# 수집 데이터 (서버에서 생성됨. 17MB+라 깃에 넣지 않는다)
+*.db
+*.db-journal
+
+# 로그
+*.log
+
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# 에디터/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

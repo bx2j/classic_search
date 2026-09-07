@@ -1,0 +1,6 @@
+requests>=2.31
+PyYAML>=6.0
+
+# 사내 TLS 검사 프록시(사설 루트 CA)가 있는 윈도우 PC 전용.
+# 리눅스 서버에서는 필요 없다 (없으면 net.py가 알아서 건너뛴다).
+truststore>=0.9 ; sys_platform == "win32"
