@@ -63,11 +63,17 @@ vi .env
 KOPIS_KEY=<KOPIS 서비스키>
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_CHANNEL=#classic_search
-LOOKAHEAD_DAYS=180
-REGION_PRIORITY=서울특별시,경기도,인천광역시,대전광역시,세종특별자치시,충청남도,충청북도
 ```
 
-`SLACK_APP_TOKEN`은 Socket Mode 전용이라 알림만 받을 거면 넣지 않아도 된다.
+`SLACK_CHANNEL`에는 알림 받을 채널명을 `#`까지 포함해 그대로 적는다.
+공개 채널이고 봇에 `chat:write.public` 스코프가 있으면 봇을 초대하지 않아도 된다.
+비공개 채널이면 그 채널에서 `/invite @봇이름`.
+
+`LOOKAHEAD_DAYS`와 `REGION_PRIORITY`는 비워두면 기본값이 쓰인다.
+`SLACK_APP_TOKEN`은 현재 코드가 쓰지 않으므로 비워둔다.
+
+설정이 빠지면 `sync` 실행 시 경고가 뜬다. 슬랙 설정이 없으면 조용히
+콘솔로만 출력하므로, 첫 실행 로그에 경고가 없는지 확인할 것.
 
 ## 5. 첫 실행
 

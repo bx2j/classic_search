@@ -119,7 +119,27 @@ def _by_region(rows):
                                        r["date_from"] or ""))
 
 
+def _warn_unconfigured() -> None:
+    """설정이 비어 알림이 안 나가는 상황을 조용히 넘기지 않는다.
+
+    .env.example 에 SLACK_BOT_TOKEN 을 빠뜨린 적이 있는데, 그대로 배포하면
+    콘솔로만 출력되고 슬랙은 조용해서 한참 뒤에야 알게 된다.
+    """
+    if not config.KOPIS_KEY:
+        log.warning("KOPIS_KEY 가 비어 있습니다 - 전국 수집 없이 공연장 직접 수집만 합니다.")
+    if not (config.SLACK_BOT_TOKEN and config.SLACK_CHANNEL) and not config.SLACK_WEBHOOK:
+        log.warning(
+            "슬랙 설정이 없어 콘솔로만 출력합니다. .env 에 "
+            "SLACK_BOT_TOKEN + SLACK_CHANNEL(예: #classic_search) 또는 "
+            "SLACK_WEBHOOK 을 넣으세요."
+        )
+    elif config.SLACK_BOT_TOKEN and not config.SLACK_CHANNEL:
+        log.warning("SLACK_BOT_TOKEN 은 있는데 SLACK_CHANNEL 이 비어 있습니다 "
+                    "(예: SLACK_CHANNEL=#classic_search).")
+
+
 def cmd_sync(args) -> int:
+    _warn_unconfigured()
     conn = store.connect(config.DB_PATH)
     days = args.days or config.LOOKAHEAD_DAYS
 
