@@ -21,6 +21,8 @@ from .match import _col
 
 log = logging.getLogger(__name__)
 
+POST_URL = "https://slack.com/api/chat.postMessage"
+
 _WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
 WEEKEND_MARK = "🟠"       # 슬랙: 주말
 HOLIDAY_MARK = "🔴"       # 슬랙: 공휴일

@@ -262,9 +262,18 @@ def cmd_slack_test(args) -> int:
         ok, err = notify.post_message(config.SLACK_BOT_TOKEN, channel, text=msg)
         print(f"봇 토큰 전송 -> {channel}: " + ("성공" if ok else f"실패 ({err})"))
         if not ok:
-            print("  not_in_channel  : 비공개 채널입니다. 채널에서 /invite @봇이름")
-            print("  channel_not_found: 채널명을 확인하세요 (#없이 이름만도 됩니다)")
-            print("  missing_scope    : OAuth & Permissions에서 chat:write 추가 후 재설치")
+            hints = {
+                "not_in_channel": "비공개 채널입니다. 채널에서 /invite @봇이름",
+                "channel_not_found": "채널명을 확인하세요 (#없이 이름만도 됩니다)",
+                "missing_scope": "OAuth & Permissions에서 chat:write 추가 후 앱 재설치",
+                "invalid_auth": "토큰이 만료/폐기됐습니다. 재발급 후 .env 갱신",
+                "ratelimited": "잠시 후 다시 시도하세요",
+            }
+            if err in hints:
+                print(f"  → {hints[err]}")
+            else:
+                # 슬랙 오류코드가 아니면 코드 쪽 문제다. 엉뚱한 안내를 하지 않는다.
+                print("  → 슬랙 API 오류가 아닙니다. 위 메시지가 원인입니다.")
         return 0 if ok else 1
     if config.SLACK_WEBHOOK:
         ok = notify.to_slack_webhook(config.SLACK_WEBHOOK, [])
@@ -363,6 +372,23 @@ def cmd_doctor(args) -> int:
         except sqlite3.Error:
             pass
         con.close()
+
+    # 알림 경로를 실제로 쏘지 않고 점검한다.
+    # 편집 중 모듈 상수나 함수가 지워져도 sync 가 실패하기 전까지는 드러나지 않는다.
+    # 실제로 POST_URL 이 사라진 채로 배포돼 slack-test 가 NameError 로 죽은 적이 있다.
+    print("── 코드 무결성 ──")
+    try:
+        assert notify.POST_URL.startswith("https://"), "POST_URL 이상"
+        sample = [({"title": "점검용", "date_from": "2026-01-01", "date_to": "2026-01-01",
+                    "time_info": "19:30", "venue": "테스트홀", "hall": "", "cast_names": "",
+                    "price": "", "state": "", "url": "https://example.com",
+                    "ticket_url": "", "program": "", "program_core": "", "genre": ""},
+                   type("W", (), {"name": "점검"})())]
+        blocks = notify._blocks(sample)
+        assert blocks and blocks[0]["type"] == "header", "blocks 생성 이상"
+        line("알림 메시지 생성", True, f"{len(blocks)}개 블록")
+    except Exception as e:  # noqa: BLE001
+        line("알림 메시지 생성", False, f"{type(e).__name__}: {e}")
 
     print("── 네트워크 ──")
     for name, url in (("KOPIS", "http://www.kopis.or.kr/"),
