@@ -323,16 +323,46 @@ def cmd_doctor(args) -> int:
     print("── 데이터베이스 ──")
     exists = config.DB_PATH.exists()
     size = config.DB_PATH.stat().st_size // 1024 if exists else 0
-    line("concerts.db", exists, f"{size:,}KB" if exists else "아직 없음(첫 실행 전이면 정상)")
+    line("concerts.db", exists,
+         f"{size:,}KB  ({config.DB_PATH})" if exists
+         else f"아직 없음 - 첫 sync 전이면 정상 ({config.DB_PATH})")
+
     if exists:
-        c = sqlite3.connect(config.DB_PATH)
-        q = lambda w: c.execute("select count(*) from performances where " + w).fetchone()[0]
+        con = sqlite3.connect(f"file:{config.DB_PATH}?mode=ro", uri=True)
+
+        def count(sql: str, label: str) -> None:
+            """조회 하나가 실패해도 나머지 항목은 계속 보여준다."""
+            try:
+                print(f"         {label:<12} {con.execute(sql).fetchone()[0]:,}건")
+            except sqlite3.Error as e:
+                print(f"         {label:<12} 조회 실패 ({e})")
+
+        count("select count(*) from performances", "공연")
+        count("select count(*) from performances "
+              "where program_core is not null and program_core != ''", "곡목")
+        count("select count(*) from performances "
+              "where cast_names is not null and cast_names != ''", "출연진")
+        count("select count(*) from performances "
+              "where ticket_url is not null and ticket_url != ''", "예매링크")
+        count("select count(*) from notified", "알림 기록")
+
         try:
-            print(f"         공연 {q('1=1')}건 / 곡목 {q(chr(34) + 'program_core' + chr(34) + ' is not null and program_core != ' + chr(39) + chr(39))}건")
+            rows = con.execute(
+                "select watch_name, count(*) from notified group by watch_name "
+                "order by count(*) desc").fetchall()
+            for name, n in rows:
+                print(f"           · {name} {n}건")
+            if not rows:
+                print("           · (아직 없음 - 다음 sync 에서 매칭분이 발송됩니다)")
         except sqlite3.Error as e:
-            print(f"         (조회 실패: {e})")
-        n = c.execute("select count(*) from notified").fetchone()[0]
-        print(f"         알림 기록 {n}건")
+            print(f"           · 알림 기록 상세 조회 실패 ({e})")
+
+        try:
+            last = con.execute("select max(updated_at) from performances").fetchone()[0]
+            print(f"         마지막 갱신   {last or '(없음)'}")
+        except sqlite3.Error:
+            pass
+        con.close()
 
     print("── 네트워크 ──")
     for name, url in (("KOPIS", "http://www.kopis.or.kr/"),
