@@ -14,7 +14,7 @@ from difflib import SequenceMatcher
 import sys
 
 from . import config, net, notify, store
-from .match import load_watches, find_matches, normalize, haystack
+from .match import load_watches, find_matches, collapse, normalize, haystack
 from .sources import kopis, lotte, sac
 
 log = logging.getLogger("concert_watch")
@@ -207,12 +207,14 @@ def cmd_sync(args) -> int:
         print(f"      매칭 {len(hits)}건 (신규 {len(fresh)}건)")
 
     if fresh and not args.dry_run:
-        notify.send(fresh, bot_token=config.SLACK_BOT_TOKEN,
+        notify.send(collapse(fresh), bot_token=config.SLACK_BOT_TOKEN,
                     channel=config.SLACK_CHANNEL, webhook=config.SLACK_WEBHOOK)
+        # 기록은 관심항목별로 남긴다. 나중에 항목을 추가했을 때
+        # 이미 알린 공연이라도 새 항목으로 걸리면 다시 알리기 위해서다.
         for r, w in fresh:
             store.mark_notified(conn, r["id"], w.name)
     elif fresh:
-        notify.to_console(fresh)
+        notify.to_console(collapse(fresh))
         print("(--dry-run: 알림 기록을 남기지 않았습니다)")
     else:
         print("      새로 알릴 공연 없음")
@@ -233,11 +235,11 @@ def cmd_matches(args) -> int:
         if not hits:
             print("보낼 공연이 없습니다.")
             return 0
-        notify.send(hits, bot_token=config.SLACK_BOT_TOKEN,
+        notify.send(collapse(hits), bot_token=config.SLACK_BOT_TOKEN,
                     channel=config.SLACK_CHANNEL, webhook=config.SLACK_WEBHOOK)
         return 0
 
-    notify.to_console(hits)
+    notify.to_console(collapse(hits))
     return 0
 
 

@@ -143,6 +143,28 @@ def haystack(row, *, full: bool = False) -> str:
     return LINE_SEP.join(p for p in parts if p)
 
 
+def collapse(hits):
+    """(공연, 관심항목) 쌍들을 공연 단위로 합친다.
+
+    한 공연이 여러 관심항목에 걸릴 수 있다. 예: '라흐마니노프 in 뉴욕'은
+    협주곡 2번과 3번을 모두 연주해서 두 항목에 걸린다. 매칭은 맞지만
+    목록에 같은 공연이 두 줄로 나오면 안 된다.
+
+    반환: [(공연, [관심항목, ...]), ...]  - 입력 순서 유지
+    """
+    order: list = []
+    groups: dict = {}
+    for row, w in hits:
+        key = row["id"]
+        if key not in groups:
+            groups[key] = (row, [])
+            order.append(key)
+        names = groups[key][1]
+        if all(x.name != w.name for x in names):
+            names.append(w)
+    return [groups[k] for k in order]
+
+
 def find_matches(rows, watches: list[Watch]) -> list[tuple[object, Watch]]:
     hits = []
     for row in rows:

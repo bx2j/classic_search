@@ -157,14 +157,14 @@ def _blocks(hits) -> list[dict]:
         "type": "header",
         "text": {"type": "plain_text", "text": head, "emoji": True},
     }]
-    for row, watch in hits[:40]:          # 슬랙 블록 상한(50) 여유
+    for row, watches in hits[:40]:        # 슬랙 블록 상한(50) 여유
         blocks.append({"type": "divider"})
         mark, hol = _marks(row, tty=False)
+        tags = " · ".join(f"`{w.name}`" for w in watches)
         blocks.append({
             "type": "section",
             "text": {"type": "mrkdwn",
-                     "text": f"`{watch.name}`" + chr(10)
-                             + _fmt_line(row, mark=mark, holiday=hol)},
+                     "text": tags + chr(10) + _fmt_line(row, mark=mark, holiday=hol)},
         })
         buttons = []
         tick = _col(row, "ticket_url")
@@ -201,9 +201,9 @@ def to_console(hits) -> None:
     print(chr(10) + bar)
     print(f"🎹 새 공연 {len(hits)}건" + ("   (" + " · ".join(tags) + ")" if tags else ""))
     print(bar)
-    for row, watch in hits:
+    for row, watches in hits:
         mark, hol = _marks(row, tty=True)
-        print(f"{chr(10)}[{watch.name}]")
+        print(f"{chr(10)}[{'] ['.join(w.name for w in watches)}]")
         print(_fmt_line(row, mark=mark, holiday=hol).replace("*", ""))
         tick = _col(row, "ticket_url")
         if tick:
