@@ -20,9 +20,18 @@ if [ -f "$LOG" ] && [ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt 5000000 ]; t
     mv -f "$LOG" "$LOG.1"
 fi
 
-exec >> "$LOG" 2>&1        # ← 이 줄 이후 모든 출력(오류 포함)이 로그로 간다
+# 로그로 보내되, 사람이 직접 실행했을 때는 화면에도 같이 뿌린다.
+# 로그로만 보내면 첫 실행(30분)에 화면이 조용해서 멈춘 줄 알게 된다.
+if [ -t 1 ]; then
+    exec > >(tee -a "$LOG") 2>&1
+else
+    exec >> "$LOG" 2>&1        # cron 등 비대화형
+fi
 
 echo "================ $(date '+%Y-%m-%d %H:%M:%S %Z') 시작 ================"
+if [ -t 1 ]; then
+    echo "(첫 실행은 곡목·출연진·예매링크 보강 때문에 30분쯤 걸립니다)"
+fi
 
 # 서버가 UTC면 date.today()가 하루 어긋나 수집 구간이 밀린다.
 export TZ="Asia/Seoul"

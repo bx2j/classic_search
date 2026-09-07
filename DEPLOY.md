@@ -78,11 +78,18 @@ SLACK_CHANNEL=#classic_search
 ## 5. 첫 실행
 
 ```bash
-./run_sync.sh          # 백그라운드 아님. 30분쯤 걸린다
-tail -f sync.log
+./run_sync.sh
 ```
 
-첫 실행만 오래 걸린다. 곡목·출연진·예매링크를 1,600여 건 채우기 때문이다.
+**첫 실행은 30분쯤 걸린다.** 곡목·출연진·예매링크를 1,600여 건 채우기 때문이다.
+직접 실행하면 진행 상황이 화면과 `sync.log`에 동시에 나온다.
+다른 창에서 보려면:
+
+```bash
+tail -f sync.log
+ps aux | grep concert_watch     # 살아있는지
+```
+
 나눠서 채우고 싶으면:
 
 ```bash
@@ -95,6 +102,7 @@ tail -f sync.log
 동작 확인:
 
 ```bash
+.venv/bin/python -m concert_watch doctor    # 설정·DB·네트워크·슬랙 한 번에 점검
 .venv/bin/python -m concert_watch matches
 .venv/bin/python -m concert_watch search 브람스 --weekend
 ```
